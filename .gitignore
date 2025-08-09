@@ -1,0 +1,8 @@
+__pycache__/
+*.py[cod]
+*.class
+*.so
+.DS_Store
+*.ipynb_checkpoints/
+data/
+datasets/

@@ -85,10 +85,9 @@ def softmax_loss_vectorized(W, X, y, reg):
     #############################################################################
     scores = X.dot(W) # (N, C)
     scores -= np.max(scores, axis=1, keepdims=True)
-    exp_scores = np.exp(scores)
-    probs = exp_scores / np.sum(exp_scores, axis=1, keepdims=True) # (N, C)
+    log_probs = scores - np.log(np.sum(np.exp(scores), axis=1, keepdims=True))
+    loss_data = -log_probs[np.arange(num_train), y]
 
-    loss_data = -np.log(probs[np.arange(num_train), y]) # (N,)
     loss = np.sum(loss_data) / num_train + reg * np.sum(W**2)
 
     #############################################################################
@@ -100,7 +99,11 @@ def softmax_loss_vectorized(W, X, y, reg):
     # to reuse some of the intermediate values that you used to compute the     #
     # loss.                                                                     #
     #############################################################################
-    probs[np.arange(num_train), y] -= 1
-    dW = X.T.dot(probs) / num_train + 2 * reg * W
+    exp_scores = np.exp(scores)
+    probs = exp_scores / np.sum(exp_scores, axis=1, keepdims=True)
+    dscores = probs.copy()
+
+    dscores[np.arange(num_train), y] -= 1
+    dW = X.T.dot(dscores) / num_train + 2 * reg * W
 
     return loss, dW

@@ -54,7 +54,12 @@ class TwoLayerNet(object):
         # and biases using the keys 'W1' and 'b1' and second layer                 #
         # weights and biases using the keys 'W2' and 'b2'.                         #
         ############################################################################
-
+        self.params = {
+          'W1' : np.random.randn(input_dim, hidden_dim) * weight_scale,
+          'b1' : np.zeros((hidden_dim, )),
+          'W2' : np.random.randn(hidden_dim, num_classes) * weight_scale,
+          'b2' : np.zeros((num_classes, ))
+        }
         ############################################################################
         #                             END OF YOUR CODE                             #
         ############################################################################
@@ -83,7 +88,10 @@ class TwoLayerNet(object):
         # TODO: Implement the forward pass for the two-layer net, computing the    #
         # class scores for X and storing them in the scores variable.              #
         ############################################################################
-
+        W1, b1, W2, b2 = self.params.values()
+        out1, cache1 = affine_forward(X, W1, b1)
+        out2, cache2 = relu_forward(out1)
+        scores, cache3 = affine_forward(out2, W2, b2)
         ############################################################################
         #                             END OF YOUR CODE                             #
         ############################################################################
@@ -103,7 +111,19 @@ class TwoLayerNet(object):
         # automated tests, make sure that your L2 regularization includes a factor #
         # of 0.5 to simplify the expression for the gradient.                      #
         ############################################################################
+        loss, dscores = softmax_loss(scores, y)
+        loss += 0.5 * self.reg * (np.sum(W1**2) + np.sum(W2**2))  # L2 regularization
 
+        dout2, dw2, db2 = affine_backward(dscores, cache3)
+        dout1 = relu_backward(dout2, cache2)
+        dx, dw1, db1 = affine_backward(dout1, cache1)
+
+        # L = data loss + 0.5*lambda*(W1**2 + W2**2)
+        # Above only considered data loss
+        dw2 += self.reg * W2
+        dw1 += self.reg * W1
+
+        grads = {'W1':dw1, 'b1': db1, 'W2':dw2, 'b2':db2}
         ############################################################################
         #                             END OF YOUR CODE                             #
         ############################################################################

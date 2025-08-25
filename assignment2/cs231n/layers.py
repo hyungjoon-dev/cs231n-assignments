@@ -1,4 +1,5 @@
 from builtins import range
+from typing_extensions import TypeVarTuple
 import numpy as np
 
 
@@ -23,7 +24,11 @@ def affine_forward(x, w, b):
     ###########################################################################
     # TODO: Copy over your solution from Assignment 1.                        #
     ###########################################################################
-    # 
+    N = x.shape[0]
+    x_flat = x.reshape(N, -1)  # (N, D)
+
+    out = x_flat.dot(w)
+    out += b
     ###########################################################################
     #                             END OF YOUR CODE                            #
     ###########################################################################
@@ -51,7 +56,14 @@ def affine_backward(dout, cache):
     ###########################################################################
     # TODO: Copy over your solution from Assignment 1.                        #
     ###########################################################################
-    # 
+    x_shape = x.shape
+    x_flat = x.reshape(x.shape[0], -1)  # (N, D)
+
+    dx_flat = dout.dot(w.T)
+    dx = dx_flat.reshape(x_shape)
+
+    dw = x_flat.T.dot(dout)
+    db = dout.sum(axis=0)
     ###########################################################################
     #                             END OF YOUR CODE                            #
     ###########################################################################
@@ -72,7 +84,7 @@ def relu_forward(x):
     ###########################################################################
     # TODO: Copy over your solution from Assignment 1.                        #
     ###########################################################################
-    # 
+    out = np.maximum(0, x)
     ###########################################################################
     #                             END OF YOUR CODE                            #
     ###########################################################################
@@ -94,7 +106,7 @@ def relu_backward(dout, cache):
     ###########################################################################
     # TODO: Copy over your solution from Assignment 1.                        #
     ###########################################################################
-    # 
+    dx = dout * (x > 0)
     ###########################################################################
     #                             END OF YOUR CODE                            #
     ###########################################################################
@@ -119,7 +131,16 @@ def softmax_loss(x, y):
     ###########################################################################
     # TODO: Copy over your solution from Assignment 1.                        #
     ###########################################################################
-    # 
+    N = x.shape[0]
+    P = np.exp(x - np.max(x, axis=1, keepdims=True))  # (N, C)
+    P /= np.sum(P, axis=1, keepdims=True)
+
+    loss_data = -np.log(P[np.arange(N), y]) # (N, )
+    loss = np.sum(loss_data) / N
+
+    dx = P.copy()
+    dx[np.arange(N), y] -= 1
+    dx /= N
     ###########################################################################
     #                             END OF YOUR CODE                            #
     ###########################################################################
@@ -194,7 +215,18 @@ def batchnorm_forward(x, gamma, beta, bn_param):
         # Referencing the original paper (https://arxiv.org/abs/1502.03167)   #
         # might prove to be helpful.                                          #
         #######################################################################
-        pass
+        sample_mean = np.mean(x, axis=0)  # (D, )
+        x_centered = x - sample_mean
+        sample_var = np.mean(x_centered**2, axis=0) # (D, )
+
+        x_normalized = (x - sample_mean) / np.sqrt(sample_var + eps)  # (N, D)
+
+        out = gamma * x_normalized + beta
+
+        running_mean = momentum * running_mean + (1 - momentum) * sample_mean
+        running_var = momentum * running_var + (1 - momentum) * sample_var
+
+        cache = (x, sample_mean, sample_var, x_normalized, gamma, beta, eps)
         #######################################################################
         #                           END OF YOUR CODE                          #
         #######################################################################
@@ -205,7 +237,8 @@ def batchnorm_forward(x, gamma, beta, bn_param):
         # then scale and shift the normalized data using gamma and beta.      #
         # Store the result in the out variable.                               #
         #######################################################################
-        pass
+        x_normalized = (x - running_mean) / np.sqrt(running_var + eps)
+        out = gamma * x_normalized + beta
         #######################################################################
         #                          END OF YOUR CODE                           #
         #######################################################################
@@ -242,7 +275,24 @@ def batchnorm_backward(dout, cache):
     # Referencing the original paper (https://arxiv.org/abs/1502.03167)       #
     # might prove to be helpful.                                              #
     ###########################################################################
-    # 
+    x, sample_mean, sample_var, x_normalized, gamma, beta, eps = cache
+    N = x.shape[0]
+
+    dbeta = np.sum(dout, axis=0)  # (D, )
+    dgamma = np.sum(dout * x_normalized, axis=0)  # (D, )
+    dx_normalized = dout * gamma # (N, D)
+
+    x_centered = x - sample_mean
+    std = np.sqrt(sample_var + eps)
+
+    dx_centered = dx_normalized * (1 / std) # (N, D)
+    dstd = np.sum(dx_normalized * x_centered * (-1 / std**2), axis=0) # (D, )
+    dvar = dstd * 0.5 / std
+
+    dx_centered += dvar * (2.0/N) * x_centered
+    dmean = -np.sum(dx_centered, axis=0)  # (D, )
+
+    dx = dx_centered + dmean / N
     ###########################################################################
     #                             END OF YOUR CODE                            #
     ###########################################################################
@@ -272,7 +322,26 @@ def batchnorm_backward_alt(dout, cache):
     # should be able to compute gradients with respect to the inputs in a     #
     # single statement; our implementation fits on a single 80-character line.#
     ###########################################################################
-    # 
+    x, sample_mean, sample_var, x_normalized, gamma, beta, eps = cache
+    N, D = dout.shape
+    
+    dbeta = np.sum(dout, axis=0)  # (D,)
+    dgamma = np.sum(dout * x_normalized, axis=0)  # (D,)
+    
+    dx_normalized = dout * gamma  # ∂L/∂x̂_i = ∂L/∂y_i * γ
+    inv_std = 1.0 / np.sqrt(sample_var + eps)  # 1/√(σ² + ε)
+    
+    # Apply the derived formula:
+    # ∂L/∂x_i = (1/N) * (1/√(σ² + ε)) * [
+    #     N * ∂L/∂x̂_i - Σ(∂L/∂x̂_k) - x̂_i * Σ(∂L/∂x̂_k * x̂_k)
+    # ]
+    
+    # Final dx calculation (the paper's formula)
+    dx = (inv_std / N) * (
+        N * dx_normalized - 
+        np.sum(dx_normalized, axis=0, keepdims=True) - 
+        x_normalized * np.sum(dx_normalized * x_normalized, axis=0, keepdims=True)
+    )
     ###########################################################################
     #                             END OF YOUR CODE                            #
     ###########################################################################
@@ -313,7 +382,14 @@ def layernorm_forward(x, gamma, beta, ln_param):
     # transformations you could perform, that would enable you to copy over   #
     # the batch norm code and leave it almost unchanged?                      #
     ###########################################################################
-    # 
+    N, D = x.shape
+
+    sample_mean = np.mean(x, axis=1, keepdims=True) # (N, 1)
+    sample_var = np.var(x, axis=1, keepdims=True) # (N, 1)
+
+    x_normalized = (x - sample_mean) / np.sqrt(sample_var + eps)
+    out = x_normalized * gamma + beta # (N, D)
+    cache = (x, sample_mean, sample_var, x_normalized, gamma, beta, eps)
     ###########################################################################
     #                             END OF YOUR CODE                            #
     ###########################################################################
@@ -343,7 +419,24 @@ def layernorm_backward(dout, cache):
     # implementation of batch normalization. The hints to the forward pass    #
     # still apply!                                                            #
     ###########################################################################
-    # 
+    x, sample_mean, sample_var, x_normalized, gamma, beta, eps = cache
+    N, D = x.shape
+
+    dbeta = np.sum(dout, axis=0)  # (D, )
+    dgamma = np.sum(dout * x_normalized, axis=0)  # (D, )
+    dx_normalized = dout * gamma # (N, D)
+
+    x_centered = x - sample_mean  # (N, D)
+    std = np.sqrt(sample_var + eps) # (N, 1)
+
+    dx_centered = dx_normalized * (1 / std) # (N, D)
+    dstd = np.sum(dx_normalized * x_centered * (-1 / std**2), axis=1, keepdims=True)
+    dvar = dstd * 0.5 / std
+
+    dx_centered += dvar * (2.0/D) * x_centered
+    dmean = -np.sum(dx_centered, axis=1, keepdims=True)
+
+    dx = dx_centered + dmean / D
     ###########################################################################
     #                             END OF YOUR CODE                            #
     ###########################################################################
